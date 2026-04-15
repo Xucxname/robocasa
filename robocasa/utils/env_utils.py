@@ -43,6 +43,7 @@ _ROBOT_POS_OFFSETS: dict[str, list[float]] = {
     "G1": [0, -0.33, 0],
     "G1FixedLowerBody": [0, -0.33, 0],
     "GoogleRobot": [0, 0, 0],
+    "H1":[0, -0.1, -0.05],
 }
 
 KITCHEN_SCENES_5X5 = [
@@ -1540,6 +1541,10 @@ def generate_random_robot_pos(env, anchor_pos, anchor_ori, pos_dev_x, pos_dev_y)
 
 
 def set_robot_to_position(env, global_pos):
+    from robosuite.models.robots import PandaOmron
+    if not isinstance(env.robots[0].robot_model, PandaOmron):
+        return
+
     local_pos = np.matmul(
         T.matrix_inverse(T.euler2mat(env.init_robot_base_ori_anchor)), global_pos
     )
@@ -1584,6 +1589,9 @@ def set_robot_base(
     pos_dev_x,
     pos_dev_y,
 ):
+    from robosuite.models.robots import PandaOmron
+    if not isinstance(env.robots[0].robot_model, PandaOmron):
+        return anchor_pos
     """
     Sets the initial state of the robot by randomizing its position and orientation within defined deviation limits.
     The deviation limits are provided by `self.robot_spawn_position_deviation_x`, `self.robot_spawn_position_deviation_y`,

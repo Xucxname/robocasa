@@ -106,6 +106,39 @@ CAM_CONFIGS = dict(
             quat=[0, 0.707107, 0.707107, 0],
             parent_body="robot0_right_hand",
         ),
+        GR1_robot0_frontview=dict(
+            pos=[-0.50, 0, 0.95],
+            quat=[
+                0.6088936924934387,
+                0.3814677894115448,
+                -0.3673907518386841,
+                -0.5905545353889465,
+            ],
+            camera_attribs=dict(fovy="60"),
+            parent_body="mobilebase0_support",
+        ),
+        G1_robot0_frontview=dict(
+            pos=[-0.50, 0, 1.4],
+            quat=[
+                0.6088936924934387,
+                0.3814677894115448,
+                -0.3673907518386841,
+                -0.5905545353889465,
+            ],
+            camera_attribs=dict(fovy="60"),
+            parent_body="mobilebase0_support",
+        ),
+        H1_robot0_frontview=dict(
+            pos=[-0.50, 0, 1.8],
+            quat=[
+                0.6088936924934387,
+                0.3814677894115448,
+                -0.3673907518386841,
+                -0.5905545353889465,
+            ],
+            camera_attribs=dict(fovy="60"),
+            parent_body="mobilebase0_support",
+        ),
     ),
     ### Add robot specific configs here ####
     PandaMobile=dict(),
