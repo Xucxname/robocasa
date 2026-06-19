@@ -1293,6 +1293,11 @@ class Kitchen(ManipulationEnv, metaclass=KitchenEnvMeta):
                     and "fovy" in cam.attrib
                 ):
                     del cam.attrib["fovy"]
+                # If an existing robot camera authored its orientation with euler
+                # (or another MuJoCo orientation attribute), replacing it with quat
+                # requires clearing the old specifier first.
+                for attr in ("euler", "axisangle", "xyaxes", "zaxis"):
+                    cam.attrib.pop(attr, None)
 
             if cam is None:
                 cam = ET.Element("camera")
