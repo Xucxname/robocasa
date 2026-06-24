@@ -1,0 +1,66 @@
+{
+  "workflow_name": "RoboCasa Agent Engineering Workflow",
+  "repository": "Xucxname/robocasa",
+  "language": "zh-CN",
+  "principles": [
+    "先分解需求，再修改代码。",
+    "实现代理只做被批准的最小变更。",
+    "功能评审先验证行为，再讨论风格。",
+    "代码审查必须检查 RoboCasa/robosuite 既有约定是否被绕过。",
+    "所有结论必须落到文件、命令、测试结果或 PR diff。"
+  ],
+  "agents": [
+    {
+      "id": "orchestrator",
+      "name": "需求统筹与项目总控代理",
+      "recommended_model": "GPT-5.5 Thinking / x-high",
+      "owns": ["需求澄清", "范围控制", "任务拆解", "最终验收"],
+      "must_not_do": ["直接大规模改代码", "跳过测试证据", "让实现代理自行扩大范围"],
+      "primary_outputs": ["requirements.md", "implementation_plan.md", "final_validation.md"]
+    },
+    {
+      "id": "repo_architect",
+      "name": "仓库结构与约定分析代理",
+      "recommended_model": "GPT-5.5 Thinking / high",
+      "owns": ["定位相关模块", "识别既有抽象", "提出最小接入点"],
+      "must_check": ["robocasa/environments", "robocasa/models", "robocasa/wrappers", "robocasa/scripts", "robocasa/utils", "tests", "docs"],
+      "primary_outputs": ["repo_context.md", "change_surface.md"]
+    },
+    {
+      "id": "implementer",
+      "name": "具体实现代理",
+      "recommended_model": "GPT-5.3 Spark / medium-high",
+      "owns": ["按计划修改代码", "补充最小测试", "运行本地验证"],
+      "must_not_do": ["修改无关资产", "引入重型依赖", "绕过 env.step / wrapper / controller 约定", "一次性重写大模块"],
+      "primary_outputs": ["code_diff", "implementation_notes.md", "test_log.md"]
+    },
+    {
+      "id": "functional_reviewer",
+      "name": "功能评审代理",
+      "recommended_model": "GPT-5.5 Thinking / high",
+      "owns": ["按需求验收功能", "检查边界条件", "复现实验或 demo"],
+      "primary_outputs": ["functional_review.md"]
+    },
+    {
+      "id": "code_reviewer",
+      "name": "代码审查代理",
+      "recommended_model": "GPT-5.5 Thinking / high",
+      "owns": ["PR diff 审查", "架构一致性", "可维护性", "测试充分性"],
+      "review_focus": ["是否复用 RoboCasa/robosuite 现有接口", "是否破坏数据集/benchmark 兼容性", "是否存在静默失败", "是否存在硬编码路径", "是否有最小可运行验证"],
+      "primary_outputs": ["code_review.md", "PR comments"]
+    }
+  ],
+  "gates": [
+    {"id": "G0", "name": "需求冻结", "owner": "orchestrator", "required_artifacts": ["requirements.md"]},
+    {"id": "G1", "name": "方案批准", "owner": "orchestrator", "required_artifacts": ["repo_context.md", "implementation_plan.md"]},
+    {"id": "G2", "name": "实现完成", "owner": "implementer", "required_artifacts": ["code_diff", "test_log.md"]},
+    {"id": "G3", "name": "功能验收", "owner": "functional_reviewer", "required_artifacts": ["functional_review.md"]},
+    {"id": "G4", "name": "代码审查", "owner": "code_reviewer", "required_artifacts": ["code_review.md"]},
+    {"id": "G5", "name": "最终合并建议", "owner": "orchestrator", "required_artifacts": ["final_validation.md"]}
+  ],
+  "default_validation_commands": [
+    "python -m compileall robocasa tests",
+    "python -m pytest tests -q",
+    "python -m robocasa.scripts.setup_macros"
+  ]
+}
