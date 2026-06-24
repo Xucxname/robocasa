@@ -48,6 +48,14 @@
       "owns": ["PR diff 审查", "架构一致性", "可维护性", "测试充分性"],
       "review_focus": ["是否复用 RoboCasa/robosuite 现有接口", "是否破坏数据集/benchmark 兼容性", "是否存在静默失败", "是否存在硬编码路径", "是否有最小可运行验证"],
       "primary_outputs": ["code_review.md", "PR comments"]
+    },
+    {
+      "id": "data_collector",
+      "name": "数据采集脚本优化代理",
+      "recommended_model": "GPT-5.3 Spark / medium-high",
+      "owns": ["collect_sonic_demos.py 功能分析", "设计并实现接口以便于仿真数据采集", "编写与运行数据采集脚本"],
+      "must_not_do": ["修改无关的其它脚本", "写入真实硬件依赖代码", "忽视仿真环境的安全约束"],
+      "primary_outputs": ["data_collection_plan.md", "script_diff", "data_collection_notes.md"]
     }
   ],
   "gates": [
