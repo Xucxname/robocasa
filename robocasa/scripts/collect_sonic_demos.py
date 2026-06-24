@@ -1,9 +1,9 @@
 """Collect SONIC-style demonstration data in RoboCasa environments.
 
-This script provides a basic workflow for collecting simulation data using a
-random policy. It is intended as a starting point for integrating SONIC or
-other control strategies to collect high-quality demonstrations for
-learning algorithms.
+This script collects simulation demonstration data with support for recording
+additional metadata such as rewards, done flags, and camera images. It serves
+as a flexible starting point for integrating SONIC or other control strategies
+to collect high-quality demonstrations for learning algorithms.
 
 Usage example:
 
@@ -14,24 +14,25 @@ python -m robocasa.scripts.collect_sonic_demos \
     --episodes 5 \
     --horizon 200 \
     --split pretrain \
-    --output-dir /tmp/sonic_demos
+    --output-dir /tmp/sonic_demos \
+    --save-images \
+    --camera-name agentview
 ```
 
 The script saves each episode as an `.npz` file containing arrays of
-observations and actions. You can extend this script to record additional
-information (rewards, dones, timestamps, etc.) or to integrate a control
-policy such as SONIC.
+observations, actions, and optionally images, rewards, and done flags.
 """
+
 from __future__ import annotations
 
 import argparse
-import os
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 
 import gymnasium as gym
 import numpy as np
 import robocasa
+
 
 
 def collect_demo(
@@ -42,24 +43,31 @@ def collect_demo(
     split: str,
     output_dir: str,
     seed: int,
+    save_images: bool = False,
+    camera_name: Optional[str] = None,
+    camera_width: int = 256,
+    camera_height: int = 256,
+    save_meta: bool = False,
 ) -> None:
-    """Collect a number of episodes of random-action data and save to disk.
+    """Collect demonstration data for a given task and robot.
 
     Args:
         task_name: Gym registration name for the RoboCasa task, e.g.
             ``"robocasa/PickPlaceCounterToCabinet"``.
         robot: Name of the robot model to load, if applicable. Many tasks
-            encode the robot in the task name; pass ``None`` to use the
-            default.
+            encode the robot in the task name; pass ``None`` to use the default.
         episodes: Number of episodes to collect.
         horizon: Maximum number of time steps per episode.
         split: Dataset split; one of ``pretrain`` or ``target``.
         output_dir: Directory to write the collected `.npz` files.
         seed: Base random seed; subsequent episodes will increment this seed.
-
-    The collected files will be named ``<task>_<index>.npz`` within
-    ``output_dir``. Each file contains two arrays: ``observations`` and
-    ``actions``.
+        save_images: Whether to capture and save rendered RGB images alongside
+            observations and actions.
+        camera_name: Optional camera name for rendering; defaults to environment
+            default camera when ``None``.
+        camera_width: Width of rendered images when saving images.
+        camera_height: Height of rendered images when saving images.
+        save_meta: Whether to save per-step rewards and done flags.
     """
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
@@ -68,14 +76,16 @@ def collect_demo(
         env_seed = seed + episode
         env = gym.make(task_name, split=split, seed=env_seed)
         if robot is not None and hasattr(env.unwrapped, "set_robot_model"):
-            # Some environments may support switching robot models at runtime
             try:
                 env.unwrapped.set_robot_model(robot)
             except Exception:
                 pass
 
-        obs_list: list[np.ndarray] = []
-        action_list: list[np.ndarray] = []
+        obs_list: List[np.ndarray] = []
+        action_list: List[np.ndarray] = []
+        image_list: List[np.ndarray] = [] if save_images else []
+        reward_list: List[float] = [] if save_meta else []
+        done_list: List[bool] = [] if save_meta else []
 
         obs, _ = env.reset()
         for _ in range(horizon):
@@ -83,24 +93,58 @@ def collect_demo(
             next_obs, reward, terminated, truncated, info = env.step(action)
             obs_list.append(obs)
             action_list.append(action)
+
+            if save_images:
+                frame = None
+                # Try to render a frame using the requested camera and resolution.
+                try:
+                    if camera_name is not None:
+                        frame = env.render(
+                            camera_name=camera_name,
+                            width=camera_width,
+                            height=camera_height,
+                        )
+                    else:
+                        frame = env.render()
+                except Exception:
+                    # Fallback to default render without arguments.
+                    try:
+                        frame = env.render()
+                    except Exception:
+                        frame = None
+                if frame is not None:
+                    image_list.append(frame)
+
+            if save_meta:
+                reward_list.append(float(reward))
+                done_list.append(bool(terminated or truncated))
+
             obs = next_obs
             if terminated or truncated:
                 break
 
         file_name = f"{task_name.replace('/', '_')}_{episode}.npz"
         file_path = output_path / file_name
-        np.savez(
-            file_path,
-            observations=np.array(obs_list, dtype=object),
-            actions=np.array(action_list, dtype=object),
-        )
+        data = {
+            "observations": np.array(obs_list, dtype=object),
+            "actions": np.array(action_list, dtype=object),
+        }
+        if save_images:
+            data["images"] = np.array(image_list, dtype=object)
+        if save_meta:
+            data["rewards"] = np.array(reward_list, dtype=float)
+            data["dones"] = np.array(done_list, dtype=bool)
+
+        np.savez(file_path, **data)
         env.close()
         print(f"[collect] Saved {file_path}")
 
 
-
-def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Collect SONIC-style robot demonstrations")
+def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
+    """Parse command-line arguments."""
+    parser = argparse.ArgumentParser(
+        description="Collect SONIC-style robot demonstrations with optional metadata"
+    )
     parser.add_argument(
         "--task",
         required=True,
@@ -140,10 +184,38 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=0,
         help="Base random seed for reproducibility",
     )
+    parser.add_argument(
+        "--save-images",
+        action="store_true",
+        help="Save images rendered at each step using env.render(). Images will be stored in the npz file as an object array.",
+    )
+    parser.add_argument(
+        "--camera-name",
+        default=None,
+        help="Optional camera name to use when rendering images",
+    )
+    parser.add_argument(
+        "--camera-width",
+        type=int,
+        default=256,
+        help="Width of rendered images when saving images",
+    )
+    parser.add_argument(
+        "--camera-height",
+        type=int,
+        default=256,
+        help="Height of rendered images when saving images",
+    )
+    parser.add_argument(
+        "--save-meta",
+        action="store_true",
+        help="Save per-step rewards and done flags in the output file",
+    )
     return parser.parse_args(argv)
 
 
-def main(argv: list[str] | None = None) -> None:
+
+def main(argv: Optional[list[str]] = None) -> None:
     args = parse_args(argv)
     collect_demo(
         task_name=args.task,
@@ -153,6 +225,11 @@ def main(argv: list[str] | None = None) -> None:
         split=args.split,
         output_dir=args.output_dir,
         seed=args.seed,
+        save_images=args.save_images,
+        camera_name=args.camera_name,
+        camera_width=args.camera_width,
+        camera_height=args.camera_height,
+        save_meta=args.save_meta,
     )
 
 
