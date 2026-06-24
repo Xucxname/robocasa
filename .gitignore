@@ -166,5 +166,8 @@ robocasa/scripts/internal/taskgen/task_prompting/outputs/
 robocasa/scripts/taskgen/activity_prompting/outputs/
 robocasa/scripts/taskgen/task_prompting/outputs/
 
+# Agent workflow local run artifacts
+.agent-runs/
+
 # Always ignore macOS junk
 **/.DS_Store
