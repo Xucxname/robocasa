@@ -265,6 +265,8 @@ def run_collection(args, base, wall, env_kwargs, source):
             VLACameraConfig(
                 camera_name=args.vla_camera_name,
                 output_key=args.vla_camera_key,
+                camera_names=args.vla_camera_names,
+                output_keys=args.vla_camera_keys,
                 width=args.vla_camera_width,
                 height=args.vla_camera_height,
                 hz=args.vla_camera_hz,
@@ -277,7 +279,8 @@ def run_collection(args, base, wall, env_kwargs, source):
         if args.vla_keyboard_sync:
             keyboard_pub = VLAExporterKeyboardPublisher(args.vla_keyboard_port)
         print(
-            f"[sonic-vla] publishing {args.vla_camera_key} from {args.vla_camera_name} "
+            f"[sonic-vla] publishing {','.join(args.vla_camera_keys)} "
+            f"from {','.join(args.vla_camera_names)} "
             f"at {args.vla_camera_hz:g} Hz on port {args.vla_camera_port}",
             flush=True,
         )
@@ -443,9 +446,13 @@ def get_args():
     ap.add_argument("--vla-camera-port", type=int, default=5555,
                     help="ZMQ port for the RoboCasa VLA camera stream")
     ap.add_argument("--vla-camera-name", default="robot0_head_camera",
-                    help="MuJoCo camera rendered as the VLA ego_view stream")
+                    help="MuJoCo camera rendered as the single VLA image stream")
     ap.add_argument("--vla-camera-key", default="ego_view",
-                    help="Image key expected by run_data_exporter.py")
+                    help="Image key expected by run_data_exporter.py for single-camera streaming")
+    ap.add_argument("--vla-camera-names", nargs="+", default=None,
+                    help="MuJoCo cameras rendered into one VLA camera message")
+    ap.add_argument("--vla-camera-keys", nargs="+", default=None,
+                    help="Image keys for --vla-camera-names, e.g. ego_view left_wrist right_wrist")
     ap.add_argument("--vla-camera-width", type=int, default=640)
     ap.add_argument("--vla-camera-height", type=int, default=480)
     ap.add_argument("--vla-camera-hz", type=float, default=30.0,
@@ -465,7 +472,17 @@ def get_args():
     ap.set_defaults(vla_keyboard_sync=True, vla_camera_flip=False)
     ap.add_argument("--vla-save-sync-delay", type=float, default=0.08,
                     help="Small episode-end delay so run_data_exporter.py sees save/discard before reset")
-    return ap.parse_args()
+    args = ap.parse_args()
+    if (args.vla_camera_names is None) != (args.vla_camera_keys is None):
+        ap.error("--vla-camera-names and --vla-camera-keys must be provided together")
+    if args.vla_camera_names is None:
+        args.vla_camera_names = [args.vla_camera_name]
+        args.vla_camera_keys = [args.vla_camera_key]
+    if len(args.vla_camera_names) != len(args.vla_camera_keys):
+        ap.error("--vla-camera-names and --vla-camera-keys must have the same length")
+    if len(set(args.vla_camera_keys)) != len(args.vla_camera_keys):
+        ap.error("--vla-camera-keys must be unique")
+    return args
 
 
 def main():
