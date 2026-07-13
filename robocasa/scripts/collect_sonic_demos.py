@@ -55,7 +55,7 @@ def make_env(args, cfg):
     env = robosuite.make(
         args.environment, robots=[args.robot], controller_configs=cfg,
         has_renderer=True, has_offscreen_renderer=False, use_camera_obs=False, ignore_done=True,
-        renderer="mjviewer", render_camera="robot0_frontview",
+        renderer="mjviewer", render_camera=args.render_camera,
         layout_ids=args.layout, style_ids=args.style, control_freq=args.control_freq,
     )
     env_kwargs = dict(robots=[args.robot], controller_configs=cfg, initialization_noise=None,
@@ -428,6 +428,14 @@ def get_args():
     ap.add_argument("--layout", type=int, default=1, help="kitchen layout id")
     ap.add_argument("--style", type=int, default=None, help="kitchen style id (None=random)")
     ap.add_argument("--robot", default="SonicG1", help="SonicG1 or SonicG1Fixed")
+    ap.add_argument(
+        "--render-camera",
+        default="robot0_frontview",
+        help=(
+            "MuJoCo camera used by the interactive viewer; "
+            "use robot0_head_camera for robot first-person view"
+        ),
+    )
     ap.add_argument("--out", default="/tmp/sonic_robocasa_demos", help="output dataset directory")
     ap.add_argument("--record-freq", type=int, default=1, help="record one sample every N steps")
     ap.add_argument("--sim-dt", type=float, default=0.005, help="physics timestep (s); 200 Hz")

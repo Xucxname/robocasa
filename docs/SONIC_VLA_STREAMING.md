@@ -111,6 +111,17 @@ Common overrides:
 --no-vla-keyboard-sync
 ```
 
+The interactive MuJoCo viewer is independent of the VLA image stream. Select
+its startup view with one of:
+
+```bash
+# Existing pelvis-mounted third-person view (default)
+--render-camera robot0_frontview
+
+# Robot-mounted head / first-person view
+--render-camera robot0_head_camera
+```
+
 ## Episode controls
 
 Local collector hotkeys still work:
