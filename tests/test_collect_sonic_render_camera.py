@@ -44,3 +44,4 @@ def test_make_env_forwards_render_camera(monkeypatch):
 
     assert env is fake_env
     assert captured["render_camera"] == "robot0_head_camera"
+    assert captured["initialization_noise"] is None

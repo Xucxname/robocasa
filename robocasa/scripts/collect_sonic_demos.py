@@ -57,6 +57,7 @@ def make_env(args, cfg):
         has_renderer=True, has_offscreen_renderer=False, use_camera_obs=False, ignore_done=True,
         renderer="mjviewer", render_camera=args.render_camera,
         layout_ids=args.layout, style_ids=args.style, control_freq=args.control_freq,
+        initialization_noise=None,
     )
     env_kwargs = dict(robots=[args.robot], controller_configs=cfg, initialization_noise=None,
                       use_camera_obs=False, translucent_robot=False,
