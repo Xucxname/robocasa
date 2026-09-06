@@ -103,6 +103,19 @@ Note: If using SpaceMouse, you may need to modify the product ID to your appropr
 ## Tasks, datasets, policy learning, and additional use cases
 Please refer to the [documentation page](https://robocasa.ai/docs/introduction/overview.html) for information about tasks, datasets, benchmarking, and more.
 
+### SONIC replay-validated LeRobot datasets
+
+For local SONIC data collection, raw RoboCasa HDF5 episodes are the authority
+for task success, while the synchronized LeRobot dataset contains the
+``action.motion_token`` latent used for training. Do not train directly on all
+exported LeRobot episodes: first replay the raw HDF5 files, align the successful
+raw episodes with their LeRobot episodes, and generate a separate
+``_replay_cleaned`` dataset.
+
+See [SONIC replay-validated dataset cleaning](docs/SONIC_REPLAY_VALIDATED_DATASET.md)
+for the complete workflow, commands, matching policy, reports, and the verified
+``CoolBakedCake`` example.
+
 -------
 ## Releases
 * [2/18/2026] **v1.0**: RoboCasa365 release, with 365 tasks, 2500+ kitchen scenes, 2200+ hours of robot demonstration data, and benchmarking support.
