@@ -32,6 +32,7 @@ from robocasa.utils.lerobot_utils import (
 )
 import robocasa.utils.robomimic.robomimic_dataset_utils as DatasetUtils
 import robocasa.utils.robomimic.robomimic_env_utils as EnvUtils
+from robocasa.utils.camera_utils import get_robot_cam_configs
 
 
 DEFAULT_TARGET_FPS = 50
@@ -44,20 +45,38 @@ THREE_IMAGE_KEYS = ["ego_view", "left_wrist", "right_wrist"]
 DEFAULT_CAMERA_NAMES = list(THREE_CAMERA_NAMES)
 DEFAULT_IMAGE_KEYS = list(THREE_IMAGE_KEYS)
 
-VIRTUAL_WRIST_CAMERA_SPECS = {
-    "robot0_left_wrist_camera": {
-        "body": "robot0_left_wrist_yaw_link",
-        "pos": "0.08 0.02 0.03",
-        "euler": "0 -0.8 -1.57",
-        "fovy": "75",
-    },
-    "robot0_right_wrist_camera": {
-        "body": "robot0_right_wrist_yaw_link",
-        "pos": "0.08 -0.02 0.03",
-        "euler": "0 -0.8 -1.57",
-        "fovy": "75",
-    },
-}
+
+def _mjcf_attr(value) -> str:
+    """Serialize a camera config value for an MJCF XML attribute."""
+    if isinstance(value, (list, tuple, np.ndarray)):
+        return " ".join(str(item) for item in value)
+    return str(value)
+
+
+def _sonic_wrist_camera_specs() -> dict[str, dict]:
+    """Return the canonical SonicG1 wrist cameras in an injection-friendly form."""
+    camera_configs = get_robot_cam_configs("SonicG1")
+    specs = {}
+    for camera_name in ("robot0_left_wrist_camera", "robot0_right_wrist_camera"):
+        config = camera_configs[camera_name]
+        attributes = {
+            "pos": _mjcf_attr(config["pos"]),
+            "quat": _mjcf_attr(config["quat"]),
+        }
+        attributes.update(
+            {
+                key: _mjcf_attr(value)
+                for key, value in config.get("camera_attribs", {}).items()
+            }
+        )
+        specs[camera_name] = {
+            "body": config["parent_body"],
+            "attributes": attributes,
+        }
+    return specs
+
+
+VIRTUAL_WRIST_CAMERA_SPECS = _sonic_wrist_camera_specs()
 
 VIDEO_INFO = {
     "video.fps": DEFAULT_TARGET_FPS,
@@ -129,7 +148,12 @@ def _camera_names_in_model(model_xml: str) -> set[str]:
     return {cam.attrib.get("name") for cam in root.iter("camera") if cam.attrib.get("name")}
 
 
-def _add_camera_if_missing(root, body_name: str, camera_name: str, pos: str, euler: str):
+def _add_camera_if_missing(
+    root,
+    body_name: str,
+    camera_name: str,
+    attributes: dict[str, str],
+):
     if any(cam.attrib.get("name") == camera_name for cam in root.iter("camera")):
         return
     body = root.find(f".//body[@name='{body_name}']")
@@ -137,28 +161,24 @@ def _add_camera_if_missing(root, body_name: str, camera_name: str, pos: str, eul
         raise ValueError(
             f"Cannot inject camera '{camera_name}': body '{body_name}' not found in model XML."
         )
-    ET.SubElement(
-        body,
-        "camera",
-        {
-            "name": camera_name,
-            "mode": "fixed",
-            "pos": pos,
-            "euler": euler,
-            "fovy": "75",
-        },
-    )
+    camera_attributes = {"name": camera_name, "mode": "fixed"}
+    camera_attributes.update(attributes)
+    ET.SubElement(body, "camera", camera_attributes)
 
 
-def _inject_virtual_wrist_cameras(model_xml: str) -> str:
+def _inject_virtual_wrist_cameras(
+    model_xml: str,
+    camera_names: set[str] | None = None,
+) -> str:
     root = ET.fromstring(model_xml)
     for camera_name, spec in VIRTUAL_WRIST_CAMERA_SPECS.items():
+        if camera_names is not None and camera_name not in camera_names:
+            continue
         _add_camera_if_missing(
             root,
             spec["body"],
             camera_name,
-            spec["pos"],
-            spec["euler"],
+            spec["attributes"],
         )
     return ET.tostring(root, encoding="unicode")
 
@@ -167,7 +187,7 @@ def _prepare_model_xml(model_xml: str, args) -> str:
     required = set(args.camera_names)
     missing = required - _camera_names_in_model(model_xml)
     if missing and args.inject_virtual_wrist_cameras:
-        model_xml = _inject_virtual_wrist_cameras(model_xml)
+        model_xml = _inject_virtual_wrist_cameras(model_xml, camera_names=missing)
         missing = required - _camera_names_in_model(model_xml)
     if missing:
         raise ValueError(
@@ -404,13 +424,12 @@ def _write_camera_metadata(output_path: Path, args):
             "feature_key": f"observation.images.{image_key}",
         }
         if camera_name in VIRTUAL_WRIST_CAMERA_SPECS:
+            spec = VIRTUAL_WRIST_CAMERA_SPECS[camera_name]
             entry.update(
                 {
                     "injected_when_missing": bool(args.inject_virtual_wrist_cameras),
-                    "mujoco_body": VIRTUAL_WRIST_CAMERA_SPECS[camera_name]["body"],
-                    "pos": VIRTUAL_WRIST_CAMERA_SPECS[camera_name]["pos"],
-                    "euler": VIRTUAL_WRIST_CAMERA_SPECS[camera_name]["euler"],
-                    "fovy": VIRTUAL_WRIST_CAMERA_SPECS[camera_name]["fovy"],
+                    "mujoco_body": spec["body"],
+                    **spec["attributes"],
                 }
             )
         cameras[image_key] = entry

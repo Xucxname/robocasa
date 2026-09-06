@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 import argparse
+from collections.abc import Sequence
 import json
 import os
 import random
@@ -17,6 +20,14 @@ import robocasa
 from robocasa.scripts.dataset_scripts.playback_utils import (
     resolve_instruction_from_ep_meta,
 )
+
+
+DEFAULT_VIDEO_CAMERA_NAMES = (
+    "robot0_head_camera",
+    "robot0_left_wrist_camera",
+    "robot0_right_wrist_camera",
+)
+DEFAULT_ONSCREEN_CAMERA_NAME = "robot0_head_camera"
 
 
 def playback_trajectory_with_env(
@@ -253,7 +264,7 @@ def _env_meta_uses_sonic(env_meta):
         return False
 
 
-def _load_sonic_gains(env, sonic_gains_json, require=False, disable_band=False):
+def _load_sonic_gains(env, sonic_gains_json, require=False):
     """Load recorded SONIC PD gains for action replay. The dataset's stamped sonic_gains are
     authoritative; do not repair missing or invalid gains from the controller config."""
     if not _is_sonic_env(env):
@@ -271,11 +282,9 @@ def _load_sonic_gains(env, sonic_gains_json, require=False, disable_band=False):
         k: (np.asarray(kp, dtype=float), np.asarray(kd, dtype=float))
         for k, (kp, kd) in gains.items()
     })
-    if disable_band:
-        env.robots[0].composite_controller.release_band()
 
 
-def _restore_sonic_integration_state(env, integration_states):
+def _restore_sonic_integration_state(env, integration_states, forward=True):
     """Restore optional mjSTATE_INTEGRATION captured by newer SONIC demos. The critical field
     for contact-sensitive SONIC walking replay is qacc_warmstart; restoring the full first
     integration state also preserves the exact initial MuJoCo state vector."""
@@ -291,7 +300,39 @@ def _restore_sonic_integration_state(env, integration_states):
             f"SONIC states_integration has size {state.size}, expected {expected}."
         )
     mujoco.mj_setState(model, data, state, spec)
-    env.sim.forward()
+    if forward:
+        # mj_forward refreshes derived quantities but overwrites qacc_warmstart. Preserve the
+        # recorded solver warm start so the first contact-sensitive action sees the same state.
+        recorded_warmstart = data.qacc_warmstart.copy()
+        env.sim.forward()
+        data.qacc_warmstart[:] = recorded_warmstart
+
+
+def _restore_sonic_band_state(env):
+    """Match whether SONIC's pelvis support band was active in the recorded state."""
+    if not _is_sonic_env(env):
+        return
+    robot = env.robots[0]
+    controller = robot.composite_controller
+    model = env.sim.model._model if hasattr(env.sim.model, "_model") else env.sim.model
+    data = env.sim.data._data if hasattr(env.sim.data, "_data") else env.sim.data
+    pelvis_body_id = mujoco.mj_name2id(
+        model,
+        mujoco.mjtObj.mjOBJ_BODY,
+        robot.robot_model.root_body,
+    )
+    if pelvis_body_id < 0:
+        raise ValueError(
+            "Cannot restore SONIC band state: robot root body "
+            f"{robot.robot_model.root_body!r} is missing from the replay model."
+        )
+    recorded_band_enabled = bool(
+        np.linalg.norm(data.xfrc_applied[pelvis_body_id]) > 1e-9
+    )
+    if recorded_band_enabled:
+        controller.band_enabled = True
+    else:
+        controller.release_band()
 
 
 def _refresh_sonic_part_controller_state(env):
@@ -344,11 +385,14 @@ def _apply_sonic_runtime(
         env,
         sonic_gains_json,
         require=require_action_replay_metadata,
-        disable_band=require_action_replay_metadata,
     )
     _restore_sonic_integration_state(env, integration_states)
     if require_action_replay_metadata:
+        _restore_sonic_band_state(env)
         _refresh_sonic_part_controller_state(env)
+        # Controller refresh calls mj_forward. Restore the authoritative integration state one
+        # final time so qacc_warmstart and xfrc_applied reach env.step exactly as recorded.
+        _restore_sonic_integration_state(env, integration_states, forward=False)
 
 
 def reset_to(env, state):
@@ -429,6 +473,63 @@ def _sonic_dataset_timestep(dataset):
     return None
 
 
+def _resolve_render_image_names(
+    render_image_names: Sequence[str] | str | None,
+    render: bool,
+) -> list[str]:
+    """Resolve camera defaults for on-screen and video playback."""
+    if render_image_names is None:
+        if render:
+            return [DEFAULT_ONSCREEN_CAMERA_NAME]
+        return list(DEFAULT_VIDEO_CAMERA_NAMES)
+
+    if isinstance(render_image_names, str):
+        render_image_names = [render_image_names]
+    else:
+        render_image_names = list(render_image_names)
+
+    if not render_image_names:
+        raise ValueError("At least one render camera must be specified.")
+    if render and len(render_image_names) != 1:
+        raise ValueError(
+            "On-screen playback with --render supports exactly one camera; "
+            f"got {len(render_image_names)}: {render_image_names}. "
+            "Pass --render_image_names robot0_head_camera, or omit --render "
+            "to write a multi-camera video."
+        )
+    return render_image_names
+
+
+def _discover_playback_datasets(dataset: str) -> list[str]:
+    """Resolve an HDF5 file or recursively discover datasets below a directory.
+
+    Reorganized SONIC task directories store one ``ep_demo.hdf5`` per episode,
+    while legacy collection batches also contain an aggregate ``demo.hdf5``.
+    When both formats occur below the requested directory, prefer the per-episode
+    files for the entire tree so each trajectory is played exactly once.
+    """
+    if not os.path.isdir(dataset):
+        return [dataset]
+
+    episode_datasets: list[str] = []
+    batch_datasets: list[str] = []
+    for root, dirs, files in os.walk(dataset):
+        dirs.sort()
+        for filename in sorted(files):
+            path = os.path.join(root, filename)
+            if filename == "ep_demo.hdf5":
+                episode_datasets.append(path)
+            elif filename == "demo.hdf5":
+                batch_datasets.append(path)
+
+    candidates = episode_datasets if episode_datasets else batch_datasets
+    return [
+        path
+        for path in candidates
+        if not os.path.exists(os.path.splitext(path)[0] + ".mp4")
+    ]
+
+
 def playback_dataset(
     dataset,
     use_actions,
@@ -456,15 +557,10 @@ def playback_dataset(
             video_path = dataset.split(".hdf5")[0] + "_use_abs_actions.mp4"
     assert not (render and write_video)  # either on-screen or video but not both
 
-    # Auto-fill camera rendering info if not specified
-    if render_image_names is None:
-        # We fill in the automatic values
-        env_meta = get_env_metadata_from_dataset(dataset_path=dataset)
-        render_image_names = "robot0_agentview_center"
-
-    if render:
-        # on-screen rendering can only support one camera
-        assert len(render_image_names) == 1
+    render_image_names = _resolve_render_image_names(
+        render_image_names,
+        render=render,
+    )
 
     if use_obs:
         assert write_video, "playback with observations can only write to video"
@@ -500,6 +596,8 @@ def playback_dataset(
         env_kwargs["renderer"] = "mjviewer"
         env_kwargs["has_offscreen_renderer"] = write_video
         env_kwargs["use_camera_obs"] = False
+        if render:
+            env_kwargs["render_camera"] = render_image_names[0]
 
         if verbose:
             print(
@@ -610,7 +708,10 @@ def get_playback_args():
     parser.add_argument(
         "--dataset",
         type=str,
-        help="path to hdf5 dataset",
+        help=(
+            "HDF5 file or directory containing per-episode ep_demo.hdf5 files "
+            "or legacy aggregate demo.hdf5 files"
+        ),
     )
     parser.add_argument(
         "--filter_key",
@@ -676,13 +777,12 @@ def get_playback_args():
         "--render_image_names",
         type=str,
         nargs="+",
-        default=[
-            "robot0_head_camera",
-            "robot0_left_wrist_camera",
-            "robot0_right_wrist_camera",
-        ],
-        help="(optional) camera name(s) / image observation(s) to use for rendering on-screen or to video. Default is"
-        "None, which corresponds to a predefined camera for each env type",
+        default=None,
+        help=(
+            "camera name(s) / image observation(s) to render. On-screen playback "
+            "defaults to robot0_head_camera; video playback defaults to the head, "
+            "left-wrist, and right-wrist cameras"
+        ),
     )
 
     # Only use the first frame of each episode
@@ -719,27 +819,19 @@ def get_playback_args():
     )
 
     args = parser.parse_args()
+    try:
+        args.render_image_names = _resolve_render_image_names(
+            args.render_image_names,
+            render=args.render,
+        )
+    except ValueError as exc:
+        parser.error(str(exc))
     return args
 
 
 if __name__ == "__main__":
     args = get_playback_args()
-    dataset_list = []
-    if os.path.isdir(args.dataset):
-        for root, dirs, files in os.walk(args.dataset):
-            for file in files:
-                if file == "demo.hdf5":
-                    # with open(os.path.join(root, "ep_stats.json"), "r") as stats_f:
-                    #     ep_stats = json.load(stats_f)
-                    # stale = ep_stats.get("stale", False)
-                    # if stale:
-                    #     continue
-                    if os.path.exists(os.path.join(root, "demo.mp4")):
-                        # already recorded video
-                        continue
-                    dataset_list.append(os.path.join(root, file))
-    else:
-        dataset_list = [args.dataset]
+    dataset_list = _discover_playback_datasets(args.dataset)
 
     dataset_exceptions = []
     for ds_i, dataset in enumerate(dataset_list):

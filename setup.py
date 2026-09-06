@@ -32,6 +32,7 @@ setup(
         "hidapi",
         "tianshou==0.4.10",
         "lerobot==0.3.3",
+        "rerun-sdk==0.22.1",
         "gymnasium",
     ],
     eager_resources=["*"],
