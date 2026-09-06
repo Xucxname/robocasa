@@ -121,6 +121,11 @@ robocasa/models/assets/demonstrations_private
 datasets
 !docs/**/datasets
 
+# Local SONIC cleanup, replay, and agent artifacts
+/.sonic_cleanup/
+/.superpowers/
+/artifacts/
+
 # model zoo
 v-hacd
 robocasa/models/assets/model_zoo_assets

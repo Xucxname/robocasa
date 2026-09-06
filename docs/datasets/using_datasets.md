@@ -247,11 +247,38 @@ for item in train_dataset:
 
 To get dataset statistics (filter keys, objects, task language, scenes):
 ```
-python robocasa/scripts/get_dataset_info.py --dataset <ds-path>
+python -m robocasa.scripts.dataset_scripts.get_dataset_info --dataset <ds-path>
 ```
 
-You can visualize dataset videos by looking at the `videos` folder under each lerobot dataset directory. To visualize a dataset and save a video:
+SONIC VLA LeRobot datasets can be replayed as synchronized camera videos while
+their parquet/video alignment is validated:
+
 ```
-python robocasa/scripts/playback_dataset.py --n 10 --dataset <ds-path>
+python robocasa/scripts/replay_sonic_dataset.py <ds-path> \
+  --episodes 0 1 2 \
+  --output-dir artifacts/dataset_replay/review
 ```
-This will save a video of 10 random demonstrations in the same path as the dataset. You can play the full dataset by removing the `--n` flag.
+
+The command writes one tiled replay MP4 per episode and a
+`replay_report.json`. Use `--all --check-only` for a full structural audit
+without re-encoding videos. This offline replay does not reproduce MuJoCo
+physics; simulator replay requires the original collector HDF5 or a LeRobot
+dataset containing the complete `extras` state/model sidecar.
+
+For timestamp-linked interactive inspection of the G1 camera, all 64 SONIC
+`action.motion_token` dimensions, seven right-arm target/measured joint pairs,
+and right end-effector xyz, use:
+
+```
+python robocasa/scripts/rerun_sonic_dataset.py <ds-path> \
+  --episode 0 \
+  --spawn
+```
+
+Without `--spawn`, the command saves a timestamped `.rrd` and JSON processing
+manifest under `artifacts/rerun`. `--motion-token-dims` changes which token
+dimensions are initially visible; all 64 dimensions are visible by default and
+always validated and stored in the recording. The default `--camera-mode auto`
+converts H.264 G1 frames to timestamped JPEGs for Rerun 0.22 compatibility; opt
+into the smaller embedded MP4 with `--camera-mode asset-video` only when its
+decoder works on the viewer host.
