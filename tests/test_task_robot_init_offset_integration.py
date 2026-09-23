@@ -126,6 +126,46 @@ def test_close_dishwasher_writes_selected_side_pose_to_sonic_root():
             env.close()
 
 
+@pytest.mark.parametrize("layout_id", [1, 4])
+def test_load_dishwasher_writes_selected_side_pose_to_sonic_root(layout_id):
+    env = None
+    try:
+        env = _make_env("LoadDishwasher", layout_id=layout_id, mujoco_solver="PGS")
+        env.reset()
+
+        lateral_offset = env.dishwasher.width / 2 + 0.25
+        if env.drawer_side == "right":
+            lateral_offset *= -1
+        expected_position, expected_orientation = (
+            EnvUtils.compute_robot_base_placement_pose(
+                env,
+                ref_fixture=env.dishwasher,
+                offset=(lateral_offset, -0.15),
+            )
+        )
+
+        np.testing.assert_allclose(
+            env.init_robot_base_pos_anchor, expected_position, atol=1e-7
+        )
+        np.testing.assert_allclose(
+            env.init_robot_base_ori_anchor, expected_orientation, atol=1e-7
+        )
+        np.testing.assert_allclose(
+            _xml_pelvis_position(env), expected_position, atol=1e-7
+        )
+        pelvis_id = env.sim.model.body_name2id("robot0_pelvis")
+        np.testing.assert_allclose(
+            env.sim.model.body_pos[pelvis_id], expected_position, atol=1e-7
+        )
+        env.step(np.zeros(env.action_spec[0].shape))
+        assert np.isfinite(env.sim.data.qpos).all()
+        assert np.isfinite(env.sim.data.qvel).all()
+        assert np.isfinite(env.sim.data.ctrl).all()
+    finally:
+        if env is not None:
+            env.close()
+
+
 @pytest.mark.parametrize(
     "task_name",
     ["CloseDishwasher", "PickPlaceDrawerToCounter"],
