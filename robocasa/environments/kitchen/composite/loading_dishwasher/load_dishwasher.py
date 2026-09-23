@@ -47,7 +47,8 @@ class LoadDishwasher(Kitchen):
 
     def _load_model(self, *args, **kwargs):
         super()._load_model(*args, **kwargs)
-        self._place_robot()
+        if self._place_robot():
+            self._write_robot_base_pose_to_model()
 
     def _place_robot(self):
         X_OFS = 0.25
