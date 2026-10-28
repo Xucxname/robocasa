@@ -57,6 +57,27 @@ simulator source; it predates the public model-serving CLI. The evaluator
 fingerprints the source actually imported by `sim_python`, the decoder, and
 the serving model instead of assuming they match this table.
 
+## Task initialization revision
+
+Commit [`ef3c38de1189d777c1dfcc28f0c78e5bd517c446`](https://github.com/Xucxname/robocasa/commit/ef3c38de1189d777c1dfcc28f0c78e5bd517c446)
+updates fresh `PrepareBroilingStation` placement sampling. Earlier revisions
+could initialize the tongs and plate within the native success radius. New
+candidate placements require at least **0.40 m of XY separation before reset
+settling**, while retaining the original placement regions and allowing both
+objects on the same counter. After at most 100 candidates, an unsuccessful
+placement attempt returns to the existing scene-construction retry. Recorded
+`object_cfgs` metadata and deterministic XML resets bypass the new distance
+filter, preserving their replay path.
+
+The success predicate is unchanged: XY distance **< 0.30 m**, both objects
+contacting a counter, and the right hand far from the tongs. The change affects
+the fresh initialization distribution, so evaluations using this source must
+record its revision and initialization behavior separately from earlier runs.
+Keep historical statistics associated with their original source revision;
+they are not results for the revised initialization. Dataset contents and
+historical episode records remain unchanged. See the [task reference](tasks.md)
+for the source locations pinned to this revision.
+
 ## Validate a new deployment
 
 Prepare the environment with [G1 installation](installation.md), then follow

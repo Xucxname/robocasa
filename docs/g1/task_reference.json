@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "reviewed_on": "2026-10-28",
-  "task_source_commit": "3055b5e6a9f35ff664749311de59c9653c1bb051",
+  "task_source_commit": "ef3c38de1189d777c1dfcc28f0c78e5bd517c446",
   "task_manifest": "robocasa_eval/tasks50.json",
   "release_id": "benchmark40_v1_20261013",
   "task_manifest_sha256": "e213fed83e6ee5fd6006c64aaa608b163f99ca0eabb4de9660c95186c905abb8",
@@ -1003,19 +1003,19 @@
       "horizon_seconds": 180,
       "instruction_example_or_template": "Pick up the tongs from the counter and place them near the plate next to the oven.",
       "success_summary": "Tongs and plate each contact a counter; their XY distance < 0.30 m; far(tongs).",
-      "g1_or_release_note": "Unseen composite; predicate contains no movement-history requirement.",
+      "g1_or_release_note": "Fresh samples require XY separation >= 0.40 m before settling; same-counter placement remains allowed. Success predicate unchanged.",
       "class_source": {
         "path": "robocasa/environments/kitchen/composite/broiling_fish/prepare_broiling_station.py",
         "line": 4
       },
       "instruction_source": {
         "path": "robocasa/environments/kitchen/composite/broiling_fish/prepare_broiling_station.py",
-        "line": 31,
+        "line": 34,
         "owner": "PrepareBroilingStation"
       },
       "success_source": {
         "path": "robocasa/environments/kitchen/composite/broiling_fish/prepare_broiling_station.py",
-        "line": 77,
+        "line": 99,
         "owner": "PrepareBroilingStation"
       }
     },
