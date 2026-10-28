@@ -76,7 +76,25 @@ record its revision and initialization behavior separately from earlier runs.
 Keep historical statistics associated with their original source revision;
 they are not results for the revised initialization. Dataset contents and
 historical episode records remain unchanged. See the [task reference](tasks.md)
-for the source locations pinned to this revision.
+for the current pinned source locations.
+
+## Scoring and drawer initialization revision
+
+Commit [`2b5bf40398b386cf7e6ebefd7acf7ddf5c559b04`](https://github.com/Xucxname/robocasa/commit/2b5bf40398b386cf7e6ebefd7acf7ddf5c559b04)
+contains two task corrections:
+
+- `DumpLeftovers` now checks both leftover objects independently. Success
+  requires both to be outside the bowl, the bowl inside the sink, and the
+  right hand far from the bowl. Earlier revisions repeated the `leftover1`
+  check and could accept an attempt with `leftover2` still in the bowl.
+- `OpenDrawer`, `ChooseMeasuringCup`, and `DrawerCakeSort` write their selected
+  drawer-side robot anchor into the fresh G1 MJCF. This makes the actual spawn
+  follow the task-selected position and orientation. Replay with the original
+  saved XML and states retains its recorded robot placement.
+
+Record the corrected scoring and initialization source revision with new
+evaluations, and keep their results separate from historical runs. Published
+demonstrations and historical result records remain unchanged.
 
 ## Validate a new deployment
 
